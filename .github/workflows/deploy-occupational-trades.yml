@@ -5,6 +5,7 @@ on:
     paths:
       - 'occupational-trades/**'
       - 'index.html'
+      - 'scripts/test-occupational-trades.mjs'
       - '.github/workflows/deploy-occupational-trades.yml'
   workflow_dispatch:
 
@@ -58,6 +59,21 @@ jobs:
           done
           grep -q '<title>Occupational Trades:' /tmp/trade-career-page.html
 
+      - name: Browser test CV, search, resources and mobile layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/trades-browser.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" || true' EXIT
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:4173/occupational-trades/ >/dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/test-occupational-trades.mjs
+
   deploy:
     name: Publish Jobs GitHub Pages
     needs: validate
@@ -82,3 +98,18 @@ jobs:
       - name: Deploy
         id: deploy
         uses: actions/deploy-pages@v4
+      - name: Verify public production URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..18}; do
+            if curl --fail --silent --show-error --location --max-time 15 'https://jobs.skunkworksacademy.com/occupational-trades/' -o /tmp/occupational-trades-live.html && grep -q 'Occupational Trades: Careers' /tmp/occupational-trades-live.html; then
+              echo "Public occupational trades URL has correct deployed content."
+              exit 0
+            fi
+            echo "Waiting for public GitHub Pages propagation (attempt $attempt)"
+            sleep 5
+          done
+          echo "New deployment could not be confirmed at the public custom domain"
+          exit 1
+
