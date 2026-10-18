@@ -1,0 +1,84 @@
+name: Deploy Occupational Trades Careers
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'occupational-trades/**'
+      - 'index.html'
+      - '.github/workflows/deploy-occupational-trades.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: occupational-trades-pages
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate occupational careers and application tools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate HTML, sources and inline JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import vm from 'node:vm';
+          const page=fs.readFileSync('occupational-trades/index.html','utf8');
+          const home=fs.readFileSync('index.html','utf8');
+          for(const x of ['id="trades"','id="resourceCards"','id="cvForm"','id="checks"','id="planResult"','https://www.sayouth.mobi/','https://www.qcto.org.za/','https://www.merseta.org.za/','https://essa.labour.gov.za/']) {
+            if(!page.includes(x))throw Error('Missing required career-hub feature/reference: '+x);
+          }
+          if(!home.includes('href="/occupational-trades/"'))throw Error('Jobs landing page must link to occupational careers');
+          if(!page.includes('non-accredited')||!page.includes('not a live job board'))throw Error('Scope and accreditation disclaimers are missing');
+          const match=page.match(/<script>\s*("use strict";[\s\S]*?)<\/script>/);
+          if(!match)throw Error('Career tools script not found');
+          new vm.Script(match[1],{filename:'occupational-trades-inline.js'});
+          console.log('Occupational careers source and inline JavaScript validation passed');
+          NODE
+      - name: Smoke test static routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/trade-career-server.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" || true' EXIT
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:4173/occupational-trades/ >/tmp/trade-career-page.html; then break; fi
+            sleep 1
+          done
+          grep -q '<title>Occupational Trades:' /tmp/trade-career-page.html
+
+  deploy:
+    name: Publish Jobs GitHub Pages
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble and verify publish directory
+        run: |
+          mkdir -p _site
+          rsync -a --exclude='.git/' --exclude='.github/' --exclude='_site/' ./ _site/
+          test -s _site/index.html
+          test -s _site/occupational-trades/index.html
+          test "$(cat _site/CNAME)" = "jobs.skunkworksacademy.com"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@v4
