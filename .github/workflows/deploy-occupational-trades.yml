@@ -5,6 +5,9 @@ on:
     paths:
       - 'occupational-trades/**'
       - 'index.html'
+      - 'css/jobs-theme.css'
+      - 'js/app.js'
+      - 'scripts/test-jobs-homepage.mjs'
       - 'scripts/test-occupational-trades.mjs'
       - '.github/workflows/deploy-occupational-trades.yml'
   workflow_dispatch:
@@ -73,6 +76,7 @@ jobs:
             sleep 1
           done
           node scripts/test-occupational-trades.mjs
+          node scripts/test-jobs-homepage.mjs
 
   deploy:
     name: Publish Jobs GitHub Pages
@@ -113,3 +117,24 @@ jobs:
           echo "New deployment could not be confirmed at the public custom domain"
           exit 1
 
+
+      - name: Verify public Jobs homepage and CSS theme
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..18}; do
+            status="$(curl -L -s -o /tmp/jobs-home-live.html -w '%{http_code}' --max-time 15 'https://jobs.skunkworksacademy.com/?ci=theme-check' || true)"
+            css_status="$(curl -L -s -o /tmp/jobs-theme-live.css -w '%{http_code}' --max-time 15 'https://jobs.skunkworksacademy.com/css/jobs-theme.css?ci=theme-check' || true)"
+            if test "$status" = '200' && test "$css_status" = '200' \
+              && grep -q 'Jobs & Career Pathways' /tmp/jobs-home-live.html \
+              && grep -q 'css/jobs-theme.css' /tmp/jobs-home-live.html \
+              && grep -q -- '--jobs-ink:#03033a' /tmp/jobs-theme-live.css \
+              && grep -q 'id="search"' /tmp/jobs-home-live.html; then
+              echo 'Jobs homepage and branded theme available publicly.'
+              exit 0
+            fi
+            echo "Waiting for Jobs homepage and CSS publication, attempt $attempt"
+            sleep 5
+          done
+          echo 'Public Jobs homepage and CSS publication verification failed.'
+          exit 1
