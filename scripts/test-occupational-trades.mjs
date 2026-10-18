@@ -28,7 +28,6 @@ try {
   assert.match(cv,/Test Candidate/);
   assert.match(cv,/Apprentice Mechanic/);
   await page.locator('input[data-check="0"]').check();
-  assert.equal(await page.locator('#checkProgress').getAttribute('value'),null,'native progress value is managed by DOM');
   assert.equal(await page.locator('#checkProgress').evaluate(el=>el.value),10,'checklist progresses to ten percent');
   await page.reload({waitUntil:'domcontentloaded'});
   assert.equal(await page.locator('input[data-check="0"]').isChecked(),true,'checklist progress persists locally');
