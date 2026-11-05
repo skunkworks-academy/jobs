@@ -1,0 +1,140 @@
+name: Deploy Occupational Trades Careers
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'occupational-trades/**'
+      - 'index.html'
+      - 'css/jobs-theme.css'
+      - 'js/app.js'
+      - 'scripts/test-jobs-homepage.mjs'
+      - 'scripts/test-occupational-trades.mjs'
+      - '.github/workflows/deploy-occupational-trades.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: occupational-trades-pages
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate occupational careers and application tools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate HTML, sources and inline JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import vm from 'node:vm';
+          const page=fs.readFileSync('occupational-trades/index.html','utf8');
+          const home=fs.readFileSync('index.html','utf8');
+          for(const x of ['id="trades"','id="resourceCards"','id="cvForm"','id="checks"','id="planResult"','https://www.sayouth.mobi/','https://www.qcto.org.za/','https://www.merseta.org.za/','https://essa.labour.gov.za/']) {
+            if(!page.includes(x))throw Error('Missing required career-hub feature/reference: '+x);
+          }
+          if(!home.includes('href="/occupational-trades/"'))throw Error('Jobs landing page must link to occupational careers');
+          if(!page.includes('non-accredited')||!page.includes('not a live job board'))throw Error('Scope and accreditation disclaimers are missing');
+          const match=page.match(/<script>\s*("use strict";[\s\S]*?)<\/script>/);
+          if(!match)throw Error('Career tools script not found');
+          new vm.Script(match[1],{filename:'occupational-trades-inline.js'});
+          console.log('Occupational careers source and inline JavaScript validation passed');
+          NODE
+      - name: Smoke test static routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/trade-career-server.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" || true' EXIT
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:4173/occupational-trades/ >/tmp/trade-career-page.html; then break; fi
+            sleep 1
+          done
+          grep -q '<title>Occupational Trades:' /tmp/trade-career-page.html
+
+      - name: Browser test CV, search, resources and mobile layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/trades-browser.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" || true' EXIT
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:4173/occupational-trades/ >/dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/test-occupational-trades.mjs
+          node scripts/test-jobs-homepage.mjs
+
+  deploy:
+    name: Publish Jobs GitHub Pages
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble and verify publish directory
+        run: |
+          mkdir -p _site
+          rsync -a --exclude='.git/' --exclude='.github/' --exclude='_site/' ./ _site/
+          test -s _site/index.html
+          test -s _site/occupational-trades/index.html
+          test "$(cat _site/CNAME)" = "jobs.skunkworksacademy.com"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@v4
+      - name: Verify public production URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..18}; do
+            if curl --fail --silent --show-error --location --max-time 15 'https://jobs.skunkworksacademy.com/occupational-trades/' -o /tmp/occupational-trades-live.html && grep -q 'Occupational Trades: Careers' /tmp/occupational-trades-live.html; then
+              echo "Public occupational trades URL has correct deployed content."
+              exit 0
+            fi
+            echo "Waiting for public GitHub Pages propagation (attempt $attempt)"
+            sleep 5
+          done
+          echo "New deployment could not be confirmed at the public custom domain"
+          exit 1
+
+
+      - name: Verify public Jobs homepage and CSS theme
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..18}; do
+            status="$(curl -L -s -o /tmp/jobs-home-live.html -w '%{http_code}' --max-time 15 'https://jobs.skunkworksacademy.com/?ci=theme-check' || true)"
+            css_status="$(curl -L -s -o /tmp/jobs-theme-live.css -w '%{http_code}' --max-time 15 'https://jobs.skunkworksacademy.com/css/jobs-theme.css?ci=theme-check' || true)"
+            if test "$status" = '200' && test "$css_status" = '200' \
+              && grep -q 'Jobs & Career Pathways' /tmp/jobs-home-live.html \
+              && grep -q 'css/jobs-theme.css' /tmp/jobs-home-live.html \
+              && grep -q -- '--jobs-ink:#03033a' /tmp/jobs-theme-live.css \
+              && grep -q 'id="search"' /tmp/jobs-home-live.html; then
+              echo 'Jobs homepage and branded theme available publicly.'
+              exit 0
+            fi
+            echo "Waiting for Jobs homepage and CSS publication, attempt $attempt"
+            sleep 5
+          done
+          echo 'Public Jobs homepage and CSS publication verification failed.'
+          exit 1
