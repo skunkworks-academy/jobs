@@ -24,13 +24,13 @@ permissions:
   id-token: write
 
 concurrency:
-  group: occupational-trades-pages
+  group: occupational-trades-pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   validate:
     name: Validate occupational careers and application tools
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
