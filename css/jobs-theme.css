@@ -146,3 +146,13 @@ body.jobs-page .jobs-main .sr-only {position:absolute!important;width:1px;height
   body.jobs-page .jobs-main .visit-btn {color:#9ac7ff;}
 }
 @media (prefers-reduced-motion:reduce) {body.jobs-page *,body.jobs-page *::before,body.jobs-page *::after{scroll-behavior:auto!important;transition:none!important}}
+
+/* Curated opportunities remain distinct from the third-party jobs-platform directory. */
+body.jobs-page .jobs-main .vacancies-section { padding:44px 0 30px;border-bottom:1px solid var(--jobs-steel); }
+body.jobs-page .jobs-main #verifiedVacanciesStatus { color:var(--jobs-muted);font-size:.95rem; }
+body.jobs-page .jobs-main .vacancy-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,285px),1fr));gap:16px;margin-top:18px;}
+body.jobs-page .jobs-main .vacancy-card {background:var(--jobs-surface);border:1px solid var(--jobs-steel);padding:21px;border-radius:14px;}
+body.jobs-page .jobs-main .vacancy-card h3 {font-size:1.15rem;color:var(--jobs-ink);margin:0 0 8px;}
+body.jobs-page .jobs-main .vacancy-card p {margin:0 0 12px;color:var(--jobs-muted);}
+body.jobs-page .jobs-main .vacancy-card .vacancy-meta {font-size:.85rem;}
+body.jobs-page .jobs-main .vacancy-tracker-link {margin:24px 0 0;color:var(--jobs-muted);font-size:.94rem;}

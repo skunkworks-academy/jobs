@@ -1,0 +1,28 @@
+name: Validate reviewed vacancies
+on:
+  pull_request:
+    paths:
+      - 'public/verified-vacancies.json'
+      - 'js/vacancies.js'
+      - 'scripts/validate-verified-vacancies.mjs'
+      - '.github/workflows/validate-vacancies.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'public/verified-vacancies.json'
+      - 'js/vacancies.js'
+      - 'scripts/validate-verified-vacancies.mjs'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check browser script syntax
+        run: node --check js/vacancies.js
+      - name: Validate source, review dates, and expiry
+        run: node scripts/validate-verified-vacancies.mjs
